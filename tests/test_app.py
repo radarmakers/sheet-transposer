@@ -190,3 +190,10 @@ def test_read_failure_shows_technical_details(monkeypatch, tmp_path):
     assert not at.exception
     assert at.expander[0].label == "Technical details"
     assert "Read-only file system" in at.code[0].value
+
+
+def test_android_users_are_told_to_upload_from_the_gallery():
+    at = AppTest.from_file("../app.py").run(timeout=30)
+    assert any(
+        "On Android" in c.value and "camera app first" in c.value and "gallery" in c.value for c in at.caption
+    )
