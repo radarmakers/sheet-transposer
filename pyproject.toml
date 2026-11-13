@@ -28,3 +28,4 @@ dev = [
 addopts = "-m 'not slow'"
 markers = ["slow: runs real homr"]
 testpaths = ["tests"]
+pythonpath = ["."]
