@@ -46,3 +46,39 @@ Notes:
 
 Regression floor (`bench/thresholds.toml`): smoke piano pages (Mozart C major, Joplin D major),
 clean + phone means minus 0.05 → note_f1 ≥ 0.92, key_ok ≥ 0.95, full_bars_frac ≥ 0.92.
+
+## Tuning (Task 9) — 2026-11-13
+
+### `MAX_SIDE` sweep (phone variant, full set)
+
+| MAX_SIDE | piano note_f1 | organ note_f1 | vocal note_f1 | max s | max MB |
+|---|---|---|---|---|---|
+| 2000 | 0.95 | **0.25** | 0.94 | 47.8 | 1841 |
+| 2500 | 0.94 | 1.00 | 0.94 | 47.6 | 1820 |
+| 3000 (baseline) | 0.94 | 1.00 | 0.94 | 47.4 | 1881 |
+| 4000 | 0.93 | 1.00 | 0.94 | 46.3 | 1858 |
+
+Decision: keep **3000**. Piano differences are within ±0.01 (noise on 14 pages); 2000 px wrecks
+the three-staff organ page; time and memory are flat (homr appears to resize internally).
+
+### Autocontrast (clean + phone, MAX_SIDE 3000)
+
+| | piano clean | piano phone |
+|---|---|---|
+| off (baseline) | 0.95 | 0.94 |
+| on | 0.95 | 0.93 |
+
+Decision: stays **off** (rule was ≥ +0.02 on phone without hurting clean). Real dim phone photos
+may behave differently; revisit when real photos exist.
+
+### Post-processing candidates (measured, not built)
+
+From the baseline run:
+- Piano rows whose bars don't add up (`full_bars_frac < 0.8`): **3 of 42**.
+- Key signature misread: **0 of 48** piano/vocal rows.
+- Wrong bar count: 3 piano pages (homr turns some repeat signs into an extra empty bar — Joplin ×2,
+  Clara Schumann Polonaise 2).
+- Weakest piano piece: Schoenberg Op. 19 No. 6 (note_f1 0.72–0.74) — sparse, atonal, many accidentals.
+
+Conclusion: bar repair and crossed-hand repair aren't justified by synthetic pages. Revisit with
+real photos. Thresholds unchanged.

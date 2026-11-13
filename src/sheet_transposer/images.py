@@ -11,8 +11,11 @@ class ImageError(Exception):
     """The upload isn't a readable image; the message is safe to show to users."""
 
 
-def prepare_image(data: bytes, *, max_side: int = MAX_SIDE) -> bytes:
-    """Return PNG bytes: EXIF-rotated upright, flattened onto white, RGB, longest side ≤ max_side."""
+def prepare_image(data: bytes, *, max_side: int = MAX_SIDE, autocontrast: bool = False) -> bytes:
+    """Return PNG bytes: EXIF-rotated upright, flattened onto white, RGB, longest side ≤ max_side.
+
+    `autocontrast` converts to greyscale and stretches the tones (helps dim or washed-out photos).
+    """
     try:
         image = Image.open(io.BytesIO(data))
         image.load()
@@ -22,6 +25,8 @@ def prepare_image(data: bytes, *, max_side: int = MAX_SIDE) -> bytes:
         ) from error
     image = ImageOps.exif_transpose(image)
     image = _flatten_onto_white(image)
+    if autocontrast:
+        image = ImageOps.autocontrast(image.convert("L"), cutoff=1).convert("RGB")
     image.thumbnail((max_side, max_side), Image.LANCZOS)
     buffer = io.BytesIO()
     image.save(buffer, "PNG")
