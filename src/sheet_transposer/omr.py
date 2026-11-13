@@ -2,9 +2,15 @@
 
 homr writes `<stem>.musicxml` (and a `<stem>_teaser.png` preview) beside the
 input image. Its ONNX models (~150 MB) live inside the installed homr package
-and are fetched on the first run.
+and are fetched on the first run. Where that package is read-only (Streamlit
+Community Cloud), homr runs from a writable copy of its code instead, so the
+models can be downloaded into the copy.
 """
 
+import importlib.util
+import os
+import shutil
+import stat
 import subprocess
 import sys
 import tempfile
@@ -13,6 +19,9 @@ from collections.abc import Callable
 from pathlib import Path
 
 DEFAULT_TIMEOUT_S = 600
+
+WRITABLE_HOMR_ROOT = Path(tempfile.gettempdir()) / "sheet-transposer-homr"
+_MODEL_DIRS = ("segmentation", "transformer")
 
 # Only one recognition at a time per process, to stay inside Community Cloud's memory.
 # Re-entrant so callers can also hold it while preparing the image (workflow.read_page).
@@ -32,12 +41,39 @@ class OmrError(Exception):
 
 
 def homr_command(image: Path) -> list[str]:
-    """Command line that runs the homr installed alongside this Python."""
-    return [str(Path(sys.executable).parent / "homr"), str(image)]
+    """Command line that runs homr with this Python. Title detection (OCR) is skipped: unused."""
+    return [sys.executable, "-m", "homr.main", "--no-title", str(image)]
+
+
+def _installed_homr_dir() -> Path:
+    spec = importlib.util.find_spec("homr")
+    return Path(next(iter(spec.submodule_search_locations)))
+
+
+def homr_python_path() -> Path | None:
+    """None if homr can download models where it's installed; else a dir holding a writable copy."""
+    installed = _installed_homr_dir()
+    if all(os.access(installed / sub, os.W_OK) for sub in _MODEL_DIRS):
+        return None
+    copy = WRITABLE_HOMR_ROOT / "homr"
+    if not copy.exists():
+        staging = WRITABLE_HOMR_ROOT / f"homr.partial-{os.getpid()}"
+        shutil.rmtree(staging, ignore_errors=True)
+        shutil.copytree(installed, staging, ignore=shutil.ignore_patterns("__pycache__"))
+        for directory, _, _ in os.walk(staging):  # copytree keeps the read-only permissions
+            os.chmod(directory, os.stat(directory).st_mode | stat.S_IWUSR)
+        staging.rename(copy)
+    return WRITABLE_HOMR_ROOT
 
 
 def _run_homr(image: Path, timeout_s: int) -> str:
-    completed = subprocess.run(homr_command(image), timeout=timeout_s, check=True, capture_output=True)
+    env = dict(os.environ)
+    python_path = homr_python_path()
+    if python_path is not None:
+        env["PYTHONPATH"] = os.pathsep.join(filter(None, [str(python_path), env.get("PYTHONPATH")]))
+    completed = subprocess.run(
+        homr_command(image), timeout=timeout_s, check=True, capture_output=True, env=env
+    )
     return _console_text(completed.stdout, completed.stderr)
 
 
