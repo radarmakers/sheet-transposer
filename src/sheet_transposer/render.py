@@ -1,0 +1,50 @@
+"""Engrave MusicXML with Verovio and turn the result into PNG or PDF."""
+
+import io
+
+import resvg_py
+import verovio
+from PIL import Image
+
+PDF_PAGE_WIDTH_PX = 1654  # A4 at 200 dpi
+PDF_DPI = 200
+
+
+def render_svg_pages(
+    musicxml: str,
+    *,
+    page_width: int = 2100,
+    page_height: int = 2970,
+    scale: int = 40,
+    fit_height: bool = False,
+) -> list[str]:
+    """Engrave MusicXML into one SVG string per page."""
+    toolkit = verovio.toolkit()
+    toolkit.setOptions(
+        {
+            "pageWidth": page_width,
+            "pageHeight": page_height,
+            "scale": scale,
+            "footer": "none",
+            "adjustPageHeight": fit_height,
+        }
+    )
+    if not toolkit.loadData(musicxml):
+        raise ValueError("Verovio could not load the MusicXML")
+    return [toolkit.renderToSVG(page) for page in range(1, toolkit.getPageCount() + 1)]
+
+
+def render_png(svg: str, *, width_px: int) -> bytes:
+    """Rasterise one SVG page to PNG bytes."""
+    return bytes(resvg_py.svg_to_bytes(svg_string=svg, width=width_px))
+
+
+def render_pdf(musicxml: str) -> bytes:
+    """Engrave MusicXML to a PDF with one A4 page image per engraved page."""
+    pages = [
+        Image.open(io.BytesIO(render_png(svg, width_px=PDF_PAGE_WIDTH_PX))).convert("RGB")
+        for svg in render_svg_pages(musicxml)
+    ]
+    buffer = io.BytesIO()
+    pages[0].save(buffer, "PDF", save_all=True, append_images=pages[1:], resolution=PDF_DPI)
+    return buffer.getvalue()

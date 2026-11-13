@@ -1,1 +1,5 @@
 .superpowers/
+.venv/
+bench/data/
+bench/results/
+__pycache__/
