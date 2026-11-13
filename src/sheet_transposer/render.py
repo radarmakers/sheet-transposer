@@ -35,8 +35,8 @@ def render_svg_pages(
 
 
 def render_png(svg: str, *, width_px: int) -> bytes:
-    """Rasterise one SVG page to PNG bytes."""
-    return bytes(resvg_py.svg_to_bytes(svg_string=svg, width=width_px))
+    """Rasterise one SVG page to PNG bytes on an opaque white background."""
+    return bytes(resvg_py.svg_to_bytes(svg_string=svg, width=width_px, background="#ffffff"))
 
 
 def render_pdf(musicxml: str) -> bytes:
