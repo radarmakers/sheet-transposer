@@ -68,3 +68,11 @@ def test_temp_files_are_removed():
 def test_homr_command_uses_venv_executable():
     command = homr_command(Path("/tmp/page.png"))
     assert command[0].endswith("/homr") and command[1] == "/tmp/page.png"
+
+
+def test_homr_failing_to_start_raises_omr_error():
+    def fake(image: Path, timeout_s: int) -> None:
+        raise FileNotFoundError("homr")
+
+    with pytest.raises(OmrError):
+        recognise(b"png", runner=fake)

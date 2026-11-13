@@ -19,7 +19,7 @@ def prepare_image(data: bytes, *, max_side: int = MAX_SIDE, autocontrast: bool =
     try:
         image = Image.open(io.BytesIO(data))
         image.load()
-    except (UnidentifiedImageError, OSError) as error:
+    except (UnidentifiedImageError, OSError, Image.DecompressionBombError) as error:
         raise ImageError(
             "That file isn't a photo or scan we can read — please upload a JPG or PNG."
         ) from error

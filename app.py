@@ -5,23 +5,24 @@ from pathlib import Path
 
 import streamlit as st
 
+from sheet_transposer import workflow
 from sheet_transposer.keys import key_choices, key_from_label, key_label, signature_label
-from sheet_transposer.workflow import Outputs, Page, ReadError, build_outputs, read_page
+from sheet_transposer.transpose import semitone_shift, shift_label
+from sheet_transposer.workflow import Outputs, Page, ReadError
 
 SOURCE_URL = "https://github.com/OWNER/sheet-transposer"  # set at deploy (see README)
-ORIGINAL_SUFFIX = " (original)"
 
 
 @st.cache_resource(max_entries=20, show_spinner=False)
 def cached_read(upload: bytes) -> Page:
     """Identical uploads are read once; homr only runs for new images."""
-    return read_page(upload)
+    return workflow.read_page(upload)
 
 
 @st.cache_data(max_entries=50, show_spinner=False)
 def cached_outputs(musicxml: str, _page: Page, original: str, target: str) -> Outputs:
     """Keyed on the MusicXML text and key labels (`_page` is not hashed)."""
-    return build_outputs(_page, original, target)
+    return workflow.build_outputs(_page, original, target)
 
 
 def slug(label: str) -> str:
@@ -48,28 +49,39 @@ if upload is not None:
         status.update(label=f"Music read in {time.monotonic() - started:.0f} s", state="complete")
 
     detected = page.detected
-    original_choices = key_choices(detected.key.mode, include=detected.key)
+    other_mode = "minor" if detected.key.mode == "major" else "major"
+    # Detected mode first; the other mode too, so "actually C minor" can be chosen.
+    original_choices = key_choices(detected.key.mode, include=detected.key) + key_choices(
+        other_mode, include=detected.alternative or detected.key.relative
+    )
     original = st.selectbox(
         "Original key",
         original_choices,
         index=original_choices.index(key_label(detected.key)),
-        help=f"Detected from the key signature ({signature_label(detected.sharps)}) and the notes.",
+        help="Detected from the key signature and the notes. Change it if it's wrong.",
     )
     st.caption(f"Detected: {signature_label(detected.sharps)}")
     if not detected.confident and detected.alternative is not None:
         st.info(f"Not sure — this could also be {key_label(detected.alternative)}. Change it above if so.")
 
     original_key = key_from_label(original)
-    target_choices = [
-        f"{label}{ORIGINAL_SUFFIX}" if label == original else label
-        for label in key_choices(original_key.mode, include=original_key)
-    ]
-    target_display = st.selectbox(
-        "Change to", target_choices, index=target_choices.index(f"{original}{ORIGINAL_SUFFIX}")
-    )
-    target = target_display.removesuffix(ORIGINAL_SUFFIX)
+    target_choices = key_choices(original_key.mode, include=original_key)
 
-    outputs = cached_outputs(page.musicxml, page, original, target)
+    def describe(label: str) -> str:
+        if label == original:
+            return f"{label} (original)"
+        return f"{label} — {shift_label(semitone_shift(original_key, key_from_label(label)))}"
+
+    target = st.selectbox(
+        "Change to", target_choices, index=target_choices.index(original), format_func=describe
+    )
+
+    try:
+        outputs = cached_outputs(page.musicxml, page, original, target)
+    except Exception:  # engraving odd recognised music can fail in music21 or Verovio
+        st.error("Couldn't draw the music in that key. Try another key, or download the MusicXML instead.")
+        st.download_button("Download recognised MusicXML", page.musicxml, file_name=f"{Path(upload.name).stem}.musicxml")
+        st.stop()
     st.caption(outputs.shift)
 
     for svg in outputs.svgs:

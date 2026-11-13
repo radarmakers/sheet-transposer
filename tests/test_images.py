@@ -64,3 +64,9 @@ def test_autocontrast_is_off_by_default():
     washed = Image.new("L", (100, 100), 220)
     washed.paste(170, (40, 40, 60, 60))
     assert _open(prepare_image(_encode(washed))).convert("L").getextrema() == (170, 220)
+
+
+def test_decompression_bomb_is_an_image_error(monkeypatch):
+    monkeypatch.setattr(Image, "MAX_IMAGE_PIXELS", 1000)
+    with pytest.raises(ImageError, match="photo or scan"):
+        prepare_image(_encode(Image.new("RGB", (100, 100))))

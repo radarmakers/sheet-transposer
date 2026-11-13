@@ -3,6 +3,8 @@
 from collections.abc import Callable
 from dataclasses import dataclass
 
+from music21.exceptions21 import Music21Exception
+
 from sheet_transposer import omr
 from sheet_transposer.images import ImageError, prepare_image
 from sheet_transposer.keys import KeyResult, detect_key, key_from_label
@@ -32,15 +34,17 @@ class Outputs:
 def read_page(upload: bytes, *, recognise: Callable[[bytes], str] = omr.recognise) -> Page:
     """Prepare the image, recognise the music, and detect its key."""
     try:
-        musicxml = recognise(prepare_image(upload))
-        score = parse_musicxml(musicxml)
+        # Decoding a big photo is memory-hungry too, so do it inside the one-at-a-time lock.
+        with omr.LOCK:
+            musicxml = recognise(prepare_image(upload))
+        detected = detect_key(parse_musicxml(musicxml))
     except (ImageError, omr.OmrError) as error:
         raise ReadError(str(error)) from error
-    except ValueError as error:
+    except (ValueError, Music21Exception) as error:  # unreadable MusicXML, or no notes to analyse
         raise ReadError(
             "Sorry — we couldn't read the music in that image. Try a flatter, brighter photo."
         ) from error
-    return Page(musicxml=musicxml, detected=detect_key(score))
+    return Page(musicxml=musicxml, detected=detected)
 
 
 def build_outputs(page: Page, original: str, target: str) -> Outputs:

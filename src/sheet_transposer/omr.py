@@ -15,7 +15,8 @@ from pathlib import Path
 DEFAULT_TIMEOUT_S = 600
 
 # Only one recognition at a time per process, to stay inside Community Cloud's memory.
-_LOCK = threading.Lock()
+# Re-entrant so callers can also hold it while preparing the image (workflow.read_page).
+LOCK = threading.RLock()
 
 Runner = Callable[[Path, int], None]
 
@@ -36,7 +37,7 @@ def _run_homr(image: Path, timeout_s: int) -> None:
 def recognise(png: bytes, *, runner: Runner | None = None, timeout_s: int = DEFAULT_TIMEOUT_S) -> str:
     """Recognise one page image (PNG bytes) and return MusicXML text."""
     runner = runner or _run_homr
-    with _LOCK, tempfile.TemporaryDirectory(prefix="omr-") as workdir:
+    with LOCK, tempfile.TemporaryDirectory(prefix="omr-") as workdir:
         image = Path(workdir) / "page.png"
         image.write_bytes(png)
         try:
@@ -45,6 +46,8 @@ def recognise(png: bytes, *, runner: Runner | None = None, timeout_s: int = DEFA
             raise OmrError("Reading the music took too long. Try a smaller or clearer photo.") from error
         except subprocess.CalledProcessError as error:
             raise _unreadable() from error
+        except OSError as error:
+            raise OmrError("Something went wrong starting the music reader. Please try again.") from error
         output = image.with_suffix(".musicxml")
         if not output.exists():
             # homr reports some failures (e.g. "no noteheads found") without a non-zero exit.

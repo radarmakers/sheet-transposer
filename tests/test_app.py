@@ -26,6 +26,14 @@ def _app_with_upload():
     # Patches persist across AppTest runs in one process, so always start from the real function.
     real_read_page = workflow.__dict__.setdefault("_real_read_page", workflow.read_page)
     workflow.read_page = real_read_page
+    real_build_outputs = workflow.__dict__.setdefault("_real_build_outputs", workflow.build_outputs)
+    workflow.build_outputs = real_build_outputs
+    if os.environ.get("FAIL_OUTPUTS"):
+        def failing_build_outputs(*args, **kwargs):
+            raise RuntimeError("engraving failed")
+
+        workflow.build_outputs = failing_build_outputs
+        st.cache_data.clear()  # an earlier run may have cached a successful result
     if os.environ.get("FAKE_MUSICXML"):
         musicxml = Path(os.environ["FAKE_MUSICXML"]).read_text()
         workflow.read_page = lambda upload: real_read_page(upload, recognise=lambda image: musicxml)
@@ -56,7 +64,9 @@ def test_upload_shows_key_choices_music_and_downloads(monkeypatch, tmp_path, k54
     assert not at.exception
     original, target = at.selectbox
     assert original.value == "C major"
-    assert target.value == "C major (original)"
+    assert target.value == "C major"
+    assert "C major (original)" in target.options
+    assert "D major — up 2 semitones" in target.options
     assert any(c.value == "no change" for c in at.caption)
     target.select("D major").run(timeout=60)
     assert any(c.value == "up 2 semitones" for c in at.caption)
@@ -81,3 +91,32 @@ def test_real_homr_end_to_end_on_phone_photo(monkeypatch):
     assert not at.exception
     assert at.selectbox[0].value == "C major"
     assert len(at.get("download_button")) == 2
+
+
+def _k545_upload(tmp_path, k545_xml):
+    from PIL import Image
+
+    upload = tmp_path / "page.png"
+    Image.new("RGB", (200, 200), "white").save(upload)
+    musicxml = tmp_path / "k545.musicxml"
+    musicxml.write_text(k545_xml)
+    return upload, musicxml
+
+
+def test_original_key_can_be_corrected_to_relative_minor(monkeypatch, tmp_path, k545_xml):
+    at = _run_uploaded(monkeypatch, *_k545_upload(tmp_path, k545_xml))
+    original = at.selectbox[0]
+    assert "A minor" in original.options
+    original.select("A minor").run(timeout=60)
+    assert not at.exception
+    target = at.selectbox[1]
+    assert target.value == "A minor"
+    assert "B minor — up 2 semitones" in target.options
+    assert all(option.split()[1].startswith("minor") for option in target.options)
+
+
+def test_engraving_failure_is_a_friendly_error(monkeypatch, tmp_path, k545_xml):
+    monkeypatch.setenv("FAIL_OUTPUTS", "1")
+    at = _run_uploaded(monkeypatch, *_k545_upload(tmp_path, k545_xml))
+    assert not at.exception
+    assert "Couldn't draw" in at.error[0].value
