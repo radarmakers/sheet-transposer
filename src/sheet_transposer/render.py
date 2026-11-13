@@ -1,6 +1,7 @@
 """Engrave MusicXML with Verovio and turn the result into PNG or PDF."""
 
 import io
+from importlib.resources import files
 
 import resvg_py
 import verovio
@@ -8,6 +9,8 @@ from PIL import Image
 
 PDF_PAGE_WIDTH_PX = 1654  # A4 at 200 dpi
 PDF_DPI = 200
+# Verovio's default resource path is set per thread at import; Streamlit renders on other threads.
+VEROVIO_RESOURCES = str(files("verovio") / "data")
 
 
 def render_svg_pages(
@@ -20,6 +23,7 @@ def render_svg_pages(
 ) -> list[str]:
     """Engrave MusicXML into one SVG string per page."""
     toolkit = verovio.toolkit()
+    toolkit.setResourcePath(VEROVIO_RESOURCES)
     toolkit.setOptions(
         {
             "pageWidth": page_width,

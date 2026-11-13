@@ -24,3 +24,12 @@ def test_png_has_opaque_white_background(k545_xml):
 
     image = Image.open(io.BytesIO(render_png(render_svg_pages(k545_xml)[0], width_px=600)))
     assert image.convert("RGBA").getpixel((2, 2)) == (255, 255, 255, 255)
+
+
+def test_renders_from_another_thread(k545_xml):
+    # Streamlit runs app scripts on worker threads; Verovio's default resource path is per-thread.
+    from concurrent.futures import ThreadPoolExecutor
+
+    with ThreadPoolExecutor(max_workers=1) as pool:
+        pages = pool.submit(render_svg_pages, k545_xml).result()
+    assert len(pages) == 1
