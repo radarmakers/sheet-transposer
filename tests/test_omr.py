@@ -98,3 +98,19 @@ def test_is_busy_only_while_another_thread_holds_the_lock():
         release.set()
         worker.join()
     assert not is_busy()
+
+
+@pytest.mark.parametrize(
+    "error",
+    [
+        subprocess.CalledProcessError(-9, "homr"),  # killed by the out-of-memory killer
+        subprocess.CalledProcessError(1, "homr", stderr=b"...\nMemoryError\n"),
+        subprocess.CalledProcessError(1, "homr", stderr=b"onnxruntime ... std::bad_alloc"),
+    ],
+)
+def test_out_of_memory_has_its_own_message(error):
+    def fake(image: Path, timeout_s: int) -> None:
+        raise error
+
+    with pytest.raises(OmrError, match="Image processing engine out of memory"):
+        recognise(b"png", runner=fake)

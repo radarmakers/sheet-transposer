@@ -182,8 +182,7 @@ These were proposed by me (Claude), not decided by the owner:
    plus a committed `uv.lock`, installing from public PyPI. Community Cloud
    reads `uv.lock` directly; it is first in its dependency-file order. Keep
    it as the only dependency file. Set Python 3.12 in the Community Cloud
-   deploy settings to match local development. This project is an exception
-   to the owner's usual pixi rule.
+   deploy settings to match local development.
 9. **The user can correct the detected key.** The "Detected key" line is a
    dropdown that defaults to the detected key, so the user can correct it,
    e.g. "actually C minor". Transposition always starts from the key shown

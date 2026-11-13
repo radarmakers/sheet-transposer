@@ -45,6 +45,11 @@ def recognise(png: bytes, *, runner: Runner | None = None, timeout_s: int = DEFA
         except subprocess.TimeoutExpired as error:
             raise OmrError("Reading the music took too long. Try a smaller or clearer photo.") from error
         except subprocess.CalledProcessError as error:
+            if _out_of_memory(error):
+                raise OmrError(
+                    "Image processing engine out of memory. Please try again in a minute, "
+                    "or with a smaller photo."
+                ) from error
             raise _unreadable() from error
         except OSError as error:
             raise OmrError("Something went wrong starting the music reader. Please try again.") from error
@@ -53,6 +58,12 @@ def recognise(png: bytes, *, runner: Runner | None = None, timeout_s: int = DEFA
             # homr reports some failures (e.g. "no noteheads found") without a non-zero exit.
             raise _unreadable()
         return output.read_text(encoding="utf-8")
+
+
+def _out_of_memory(error: subprocess.CalledProcessError) -> bool:
+    """Killed by a signal (the OOM killer sends SIGKILL), or homr reported an allocation failure."""
+    stderr = error.stderr or b""
+    return error.returncode < 0 or b"MemoryError" in stderr or b"bad_alloc" in stderr
 
 
 def _unreadable() -> OmrError:
