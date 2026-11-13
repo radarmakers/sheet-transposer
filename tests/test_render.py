@@ -58,3 +58,16 @@ def test_threaded_render_prints_no_font_errors(k545_xml):
 def test_harmless_engraving_warnings_are_not_printed(k545_xml):
     unfinished_slur = k545_xml.replace("<notations>", '<notations><slur type="start" number="9"/>', 1)
     assert "[Warning]" not in _stderr_of_threaded_render(unfinished_slur)
+
+
+def test_svg_pages_have_their_own_white_background(k545_xml):
+    # Shown as images on a dark-mode page, transparent SVGs make black notes invisible.
+    import io
+
+    import resvg_py
+    from PIL import Image
+
+    for fit_height in (False, True):
+        svg = render_svg_pages(k545_xml, fit_height=fit_height)[0]
+        png = bytes(resvg_py.svg_to_bytes(svg_string=svg, width=400))  # no background colour given
+        assert Image.open(io.BytesIO(png)).convert("RGBA").getpixel((2, 2)) == (255, 255, 255, 255)
