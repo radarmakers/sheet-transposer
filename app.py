@@ -35,6 +35,7 @@ st.title("Sheet Transposer")
 st.caption("Works best with printed piano music: flat, well-lit, whole page in frame.")
 
 upload = st.file_uploader("Upload a photo or scan of one page", type=["jpg", "jpeg", "png", "webp"])
+st.caption("On Android, take the photo with your camera app first, then upload it from your gallery.")
 
 if upload is not None:
     data = upload.getvalue()
