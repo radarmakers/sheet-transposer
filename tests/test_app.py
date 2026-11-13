@@ -34,6 +34,11 @@ def _app_with_upload():
 
         workflow.build_outputs = failing_build_outputs
         st.cache_data.clear()  # an earlier run may have cached a successful result
+    if os.environ.get("FAIL_READ_DETAILS"):
+        def failing_read_page(upload):
+            raise workflow.ReadError("Sorry — we couldn't read any music.", details=os.environ["FAIL_READ_DETAILS"])
+
+        workflow.read_page = failing_read_page
     if os.environ.get("FAKE_MUSICXML"):
         musicxml = Path(os.environ["FAKE_MUSICXML"]).read_text()
         workflow.read_page = lambda upload: real_read_page(upload, recognise=lambda image: musicxml)
@@ -173,3 +178,15 @@ def test_friend_message_shown_while_another_reading_runs(monkeypatch, tmp_path, 
     at = _run_uploaded(monkeypatch, upload, musicxml)
     worker.join()
     assert "friend" in _all_text(at)
+
+
+def test_read_failure_shows_technical_details(monkeypatch, tmp_path):
+    from PIL import Image
+
+    upload = tmp_path / "page.png"
+    Image.new("RGB", (207, 209), "white").save(upload)  # new image: not in the read cache
+    monkeypatch.setenv("FAIL_READ_DETAILS", "OSError: [Errno 30] Read-only file system")
+    at = _run_uploaded(monkeypatch, upload)
+    assert not at.exception
+    assert at.expander[0].label == "Technical details"
+    assert "Read-only file system" in at.code[0].value

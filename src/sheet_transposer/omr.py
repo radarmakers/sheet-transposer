@@ -18,11 +18,17 @@ DEFAULT_TIMEOUT_S = 600
 # Re-entrant so callers can also hold it while preparing the image (workflow.read_page).
 LOCK = threading.RLock()
 
-Runner = Callable[[Path, int], None]
+Runner = Callable[[Path, int], str | None]  # returns homr's console output, if captured
+
+DETAILS_TAIL_CHARS = 4000
 
 
 class OmrError(Exception):
-    """Recognition failed; the message is safe to show to users."""
+    """Recognition failed; the message is safe to show to users, `details` is homr's own output."""
+
+    def __init__(self, message: str, details: str = "") -> None:
+        super().__init__(message)
+        self.details = details
 
 
 def homr_command(image: Path) -> list[str]:
@@ -30,8 +36,19 @@ def homr_command(image: Path) -> list[str]:
     return [str(Path(sys.executable).parent / "homr"), str(image)]
 
 
-def _run_homr(image: Path, timeout_s: int) -> None:
-    subprocess.run(homr_command(image), timeout=timeout_s, check=True, capture_output=True)
+def _run_homr(image: Path, timeout_s: int) -> str:
+    completed = subprocess.run(homr_command(image), timeout=timeout_s, check=True, capture_output=True)
+    return _console_text(completed.stdout, completed.stderr)
+
+
+def _console_text(stdout: bytes | None, stderr: bytes | None) -> str:
+    text = b"\n".join(part for part in (stdout, stderr) if part).decode("utf-8", errors="replace")
+    return text[-DETAILS_TAIL_CHARS:]
+
+
+def _failed(message: str, details: str) -> OmrError:
+    print(f"homr failed: {message}\n{details}", file=sys.stderr)  # visible in the host's app logs
+    return OmrError(message, details=details)
 
 
 def recognise(png: bytes, *, runner: Runner | None = None, timeout_s: int = DEFAULT_TIMEOUT_S) -> str:
@@ -41,22 +58,25 @@ def recognise(png: bytes, *, runner: Runner | None = None, timeout_s: int = DEFA
         image = Path(workdir) / "page.png"
         image.write_bytes(png)
         try:
-            runner(image, timeout_s)
+            console = runner(image, timeout_s) or ""
         except subprocess.TimeoutExpired as error:
-            raise OmrError("Reading the music took too long. Try a smaller or clearer photo.") from error
+            details = _console_text(error.stdout, error.stderr)
+            raise _failed("Reading the music took too long. Try a smaller or clearer photo.", details) from error
         except subprocess.CalledProcessError as error:
+            details = f"exit code {error.returncode}\n" + _console_text(error.output, error.stderr)
             if _out_of_memory(error):
-                raise OmrError(
+                raise _failed(
                     "Image processing engine out of memory. Please try again in a minute, "
-                    "or with a smaller photo."
+                    "or with a smaller photo.",
+                    details,
                 ) from error
-            raise _unreadable() from error
+            raise _failed(UNREADABLE, details) from error
         except OSError as error:
-            raise OmrError("Something went wrong starting the music reader. Please try again.") from error
+            raise _failed("Something went wrong starting the music reader. Please try again.", repr(error)) from error
         output = image.with_suffix(".musicxml")
         if not output.exists():
             # homr reports some failures (e.g. "no noteheads found") without a non-zero exit.
-            raise _unreadable()
+            raise _failed(UNREADABLE, console)
         return output.read_text(encoding="utf-8")
 
 
@@ -66,11 +86,10 @@ def _out_of_memory(error: subprocess.CalledProcessError) -> bool:
     return error.returncode < 0 or b"MemoryError" in stderr or b"bad_alloc" in stderr
 
 
-def _unreadable() -> OmrError:
-    return OmrError(
-        "Sorry — we couldn't read any music in that image. "
-        "Try a flatter, brighter photo of printed music."
-    )
+UNREADABLE = (
+    "Sorry — we couldn't read any music in that image. "
+    "Try a flatter, brighter photo of printed music."
+)
 
 
 def is_busy() -> bool:

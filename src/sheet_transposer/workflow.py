@@ -14,7 +14,11 @@ from sheet_transposer.transpose import semitone_shift, shift_label, transpose_sc
 
 
 class ReadError(Exception):
-    """Reading the page failed; the message is safe to show to users."""
+    """Reading the page failed; the message is safe to show to users, `details` is technical."""
+
+    def __init__(self, message: str, details: str = "") -> None:
+        super().__init__(message)
+        self.details = details
 
 
 @dataclass(frozen=True)
@@ -38,7 +42,9 @@ def read_page(upload: bytes, *, recognise: Callable[[bytes], str] = omr.recognis
         with omr.LOCK:
             musicxml = recognise(prepare_image(upload))
         detected = detect_key(parse_musicxml(musicxml))
-    except (ImageError, omr.OmrError) as error:
+    except omr.OmrError as error:
+        raise ReadError(str(error), details=error.details) from error
+    except ImageError as error:
         raise ReadError(str(error)) from error
     except (ValueError, Music21Exception) as error:  # unreadable MusicXML, or no notes to analyse
         raise ReadError(
