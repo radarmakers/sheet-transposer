@@ -1,6 +1,7 @@
 """Engrave MusicXML with Verovio and turn the result into PNG or PDF."""
 
 import io
+import re
 from importlib.resources import files
 
 import resvg_py
@@ -37,7 +38,16 @@ def render_svg_pages(
     )
     if not toolkit.loadData(musicxml):
         raise ValueError("Verovio could not load the MusicXML")
-    return [toolkit.renderToSVG(page) for page in range(1, toolkit.getPageCount() + 1)]
+    return [_on_white(toolkit.renderToSVG(page)) for page in range(1, toolkit.getPageCount() + 1)]
+
+
+_ROOT_SVG_TAG = re.compile(r"<svg\b[^>]*>")
+_WHITE_PAPER = '<rect width="100%" height="100%" fill="#ffffff"/>'
+
+
+def _on_white(svg: str) -> str:
+    """Verovio's SVG is transparent; give it white paper so notes show on dark-mode pages too."""
+    return _ROOT_SVG_TAG.sub(lambda tag: tag.group(0) + _WHITE_PAPER, svg, count=1)
 
 
 def render_png(svg: str, *, width_px: int) -> bytes:
