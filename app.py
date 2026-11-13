@@ -11,7 +11,7 @@ from sheet_transposer.keys import key_choices, key_from_label, key_label, signat
 from sheet_transposer.transpose import semitone_shift, shift_label
 from sheet_transposer.workflow import Outputs, Page, ReadError
 
-SOURCE_URL = "https://github.com/OWNER/sheet-transposer"  # set at deploy (see README)
+SOURCE_URL = "https://github.com/radarmakers/sheet-transposer"  # set at deploy (see README)
 
 
 @st.cache_resource(max_entries=20, show_spinner=False)
