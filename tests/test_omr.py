@@ -65,9 +65,68 @@ def test_temp_files_are_removed():
     assert not seen[0].parent.exists()
 
 
-def test_homr_command_uses_venv_executable():
+def test_homr_command_runs_homr_module_with_this_python_and_skips_titles():
+    import sys
+
     command = homr_command(Path("/tmp/page.png"))
-    assert command[0].endswith("/homr") and command[1] == "/tmp/page.png"
+    assert command[:3] == [sys.executable, "-m", "homr.main"]
+    assert "--no-title" in command and command[-1] == "/tmp/page.png"
+
+
+def _fake_homr_install(root: Path) -> Path:
+    package = root / "site-packages" / "homr"
+    for sub in ("segmentation", "transformer"):
+        (package / sub).mkdir(parents=True)
+    (package / "__init__.py").write_text("")
+    (package / "main.py").write_text("# homr")
+    return package
+
+
+def test_writable_install_runs_in_place(tmp_path, monkeypatch):
+    from sheet_transposer import omr
+
+    monkeypatch.setattr(omr, "_installed_homr_dir", lambda: _fake_homr_install(tmp_path))
+    monkeypatch.setattr(omr, "WRITABLE_HOMR_ROOT", tmp_path / "copy")
+    assert omr.homr_python_path() is None
+
+
+def test_read_only_install_runs_from_a_writable_copy(tmp_path, monkeypatch):
+    import os
+    import stat
+
+    from sheet_transposer import omr
+
+    package = _fake_homr_install(tmp_path)
+    for directory in (package / "segmentation", package / "transformer", package):
+        directory.chmod(stat.S_IRUSR | stat.S_IXUSR)  # like Streamlit Cloud's site-packages
+    try:
+        monkeypatch.setattr(omr, "_installed_homr_dir", lambda: package)
+        monkeypatch.setattr(omr, "WRITABLE_HOMR_ROOT", tmp_path / "copy")
+        root = omr.homr_python_path()
+        assert root == tmp_path / "copy"
+        assert (root / "homr" / "main.py").read_text() == "# homr"
+        assert os.access(root / "homr" / "segmentation", os.W_OK)
+        (root / "homr" / "segmentation" / "model.onnx").write_text("downloaded")
+        assert omr.homr_python_path() == root  # reused, not recopied
+        assert (root / "homr" / "segmentation" / "model.onnx").exists()
+    finally:
+        for directory in (package, package / "segmentation", package / "transformer"):
+            directory.chmod(stat.S_IRWXU)
+
+
+def test_default_runner_puts_the_writable_copy_first_on_pythonpath(tmp_path, monkeypatch):
+    from sheet_transposer import omr
+
+    seen = {}
+
+    def fake_run(command, **kwargs):
+        seen["env"] = kwargs["env"]
+        return subprocess.CompletedProcess(command, 0, b"", b"")
+
+    monkeypatch.setattr(omr, "homr_python_path", lambda: tmp_path / "copy")
+    monkeypatch.setattr(omr.subprocess, "run", fake_run)
+    omr._run_homr(Path("/tmp/page.png"), 10)
+    assert seen["env"]["PYTHONPATH"].split(":")[0] == str(tmp_path / "copy")
 
 
 def test_homr_failing_to_start_raises_omr_error():
