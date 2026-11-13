@@ -178,11 +178,12 @@ These were proposed by me (Claude), not decided by the owner:
    access to the phone camera.
 7. **No server-side persistence:** results live only in the user's session.
    Users keep what they download.
-8. **Python 3.12** on Community Cloud, with dependencies pinned in
-   `requirements.txt`, which is what Community Cloud installs from. On this
-   VM, the dev environment is managed with pixi and pulls only through the
-   package mirrors, per the owner's standing preference.
-   `requirements.txt` is kept in step with it.
+8. **Python 3.12, managed with uv** (owner's decision). Use `pyproject.toml`
+   plus a committed `uv.lock`, installing from public PyPI. Community Cloud
+   reads `uv.lock` directly; it is first in its dependency-file order. Keep
+   it as the only dependency file. Set Python 3.12 in the Community Cloud
+   deploy settings to match local development. This project is an exception
+   to the owner's usual pixi rule.
 9. **The user can correct the detected key.** The "Detected key" line is a
    dropdown that defaults to the detected key, so the user can correct it,
    e.g. "actually C minor". Transposition always starts from the key shown
