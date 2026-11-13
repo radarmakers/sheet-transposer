@@ -58,3 +58,11 @@ def test_degraded_music_stays_inside_the_image(k545_png, variant):
     for seed in range(5):
         x0, x1, y0, y1, (height, width) = _ink_bbox(degrade(k545_png, variant, seed=seed))
         assert x0 > 5 and y0 > 5 and x1 < width - 5 and y1 < height - 5
+
+
+def test_organ_layout_keeps_key_signature_on_every_staff():
+    from bench.build import load_excerpt
+
+    organ = next(p for p in PIECES if p.kind == "organ")
+    for part in load_excerpt(organ).parts:
+        assert part.recurse().getElementsByClass("KeySignature").first().sharps == 3

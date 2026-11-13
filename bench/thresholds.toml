@@ -1,0 +1,7 @@
+# Regression floor for the slow smoke benchmark (piano smoke pages, clean + phone).
+# Baseline means 2026-11-13 minus 0.05, rounded down. See docs/benchmark.md.
+note_f1 = 0.92
+key_ok = 0.95
+full_bars_frac = 0.92
+max_seconds = 180
+max_peak_rss_mb = 2200

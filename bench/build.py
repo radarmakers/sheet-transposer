@@ -4,11 +4,12 @@ Usage: python -m bench.build [--only PIECE_ID ...]
 """
 
 import argparse
+import copy
 import json
 import zlib
 from pathlib import Path
 
-from music21 import clef, corpus, stream
+from music21 import clef, corpus, key, stream
 
 from bench.degrade import VARIANTS, degrade
 from bench.pieces import PIECES, Piece
@@ -34,9 +35,11 @@ def load_excerpt(piece: Piece) -> stream.Score:
 def _organ_layout(chorale: stream.Score) -> stream.Score:
     """Four-part chorale as three staves: soprano+alto chords, tenor, bass as 'pedal'."""
     soprano, alto, tenor, bass = chorale.parts
-    upper = stream.Score([soprano, alto]).chordify()
+    upper = stream.Part(stream.Score([soprano, alto]).chordify().getElementsByClass(stream.Measure))
+    first_bar = upper.getElementsByClass(stream.Measure).first()
+    first_bar.insert(0, copy.deepcopy(soprano.recurse().getElementsByClass(key.KeySignature).first()))
     tenor.insert(0, clef.BassClef())
-    return stream.Score([stream.Part(upper.getElementsByClass(stream.Measure)), tenor, bass])
+    return stream.Score([upper, tenor, bass])
 
 
 def pages_for(piece: Piece) -> list[tuple[str, stream.Score]]:
