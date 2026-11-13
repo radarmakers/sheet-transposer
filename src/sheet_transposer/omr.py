@@ -60,3 +60,11 @@ def _unreadable() -> OmrError:
         "Sorry — we couldn't read any music in that image. "
         "Try a flatter, brighter photo of printed music."
     )
+
+
+def is_busy() -> bool:
+    """True if another thread is reading (or preparing) a page right now."""
+    if LOCK.acquire(blocking=False):
+        LOCK.release()
+        return False
+    return True

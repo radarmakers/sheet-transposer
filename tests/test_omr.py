@@ -76,3 +76,25 @@ def test_homr_failing_to_start_raises_omr_error():
 
     with pytest.raises(OmrError):
         recognise(b"png", runner=fake)
+
+
+def test_is_busy_only_while_another_thread_holds_the_lock():
+    from sheet_transposer.omr import LOCK, is_busy
+
+    assert not is_busy()
+    holding, release = threading.Event(), threading.Event()
+
+    def hold():
+        with LOCK:
+            holding.set()
+            release.wait()
+
+    worker = threading.Thread(target=hold)
+    worker.start()
+    holding.wait()
+    try:
+        assert is_busy()
+    finally:
+        release.set()
+        worker.join()
+    assert not is_busy()

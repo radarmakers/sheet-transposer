@@ -120,3 +120,56 @@ def test_engraving_failure_is_a_friendly_error(monkeypatch, tmp_path, k545_xml):
     at = _run_uploaded(monkeypatch, *_k545_upload(tmp_path, k545_xml))
     assert not at.exception
     assert "Couldn't draw" in at.error[0].value
+
+
+def test_target_key_survives_correcting_the_original(monkeypatch, tmp_path, k545_xml):
+    at = _run_uploaded(monkeypatch, *_k545_upload(tmp_path, k545_xml))
+    at.selectbox[1].select("D major").run(timeout=60)
+    at.selectbox[0].select("G major").run(timeout=60)
+    assert not at.exception
+    assert at.selectbox[1].value == "D major"
+    assert any(c.value == "down 5 semitones" for c in at.caption)
+
+
+def test_reading_status_is_not_shown_again_on_key_change(monkeypatch, tmp_path, k545_xml):
+    at = _run_uploaded(monkeypatch, *_k545_upload(tmp_path, k545_xml))
+    at.selectbox[1].select("D major").run(timeout=60)
+    labels = [getattr(e, "label", "") for e in at.main.children.values()]
+    assert not any("Reading the music" in label for label in labels)
+    assert any("Music read in" in c.value for c in at.caption)
+
+
+def _all_text(at) -> str:
+    return " ".join(str(getattr(e, "value", "")) for e in at.main.children.values()) + " ".join(
+        md.value for md in at.markdown
+    )
+
+
+def test_friend_message_hidden_when_nobody_else_is_reading(monkeypatch, tmp_path, k545_xml):
+    at = _run_uploaded(monkeypatch, *_k545_upload(tmp_path, k545_xml))
+    assert "friend" not in _all_text(at)
+
+
+def test_friend_message_shown_while_another_reading_runs(monkeypatch, tmp_path, k545_xml):
+    import threading
+
+    from PIL import Image
+
+    from sheet_transposer import omr
+
+    upload, musicxml = _k545_upload(tmp_path, k545_xml)
+    Image.new("RGB", (201, 203), "white").save(upload)  # new image: not in the read cache
+    holding, release = threading.Event(), threading.Event()
+
+    def other_user():
+        with omr.LOCK:
+            holding.set()
+            release.wait(5)
+
+    worker = threading.Thread(target=other_user)
+    worker.start()
+    holding.wait()
+    threading.Timer(1.0, release.set).start()
+    at = _run_uploaded(monkeypatch, upload, musicxml)
+    worker.join()
+    assert "friend" in _all_text(at)
