@@ -1,0 +1,70 @@
+import subprocess
+import threading
+import time
+from pathlib import Path
+
+import pytest
+
+from sheet_transposer.omr import OmrError, homr_command, recognise
+
+
+def test_returns_musicxml_written_beside_image():
+    def fake(image: Path, timeout_s: int) -> None:
+        image.with_suffix(".musicxml").write_text("<score-partwise/>")
+
+    assert recognise(b"png", runner=fake) == "<score-partwise/>"
+
+
+def test_nonzero_exit_raises_omr_error():
+    def fake(image: Path, timeout_s: int) -> None:
+        raise subprocess.CalledProcessError(1, "homr")
+
+    with pytest.raises(OmrError, match="couldn't read"):
+        recognise(b"png", runner=fake)
+
+
+def test_missing_output_raises_omr_error():
+    with pytest.raises(OmrError, match="couldn't read"):
+        recognise(b"png", runner=lambda image, timeout_s: None)
+
+
+def test_timeout_raises_omr_error():
+    def fake(image: Path, timeout_s: int) -> None:
+        raise subprocess.TimeoutExpired("homr", timeout_s)
+
+    with pytest.raises(OmrError, match="too long"):
+        recognise(b"png", runner=fake)
+
+
+def test_runs_are_serialised():
+    intervals = []
+
+    def fake(image: Path, timeout_s: int) -> None:
+        start = time.monotonic()
+        time.sleep(0.2)
+        intervals.append((start, time.monotonic()))
+        image.with_suffix(".musicxml").write_text("<x/>")
+
+    threads = [threading.Thread(target=recognise, args=(b"png",), kwargs={"runner": fake}) for _ in range(2)]
+    for thread in threads:
+        thread.start()
+    for thread in threads:
+        thread.join()
+    (first_start, first_end), (second_start, _) = sorted(intervals)
+    assert second_start >= first_end
+
+
+def test_temp_files_are_removed():
+    seen = []
+
+    def fake(image: Path, timeout_s: int) -> None:
+        seen.append(image)
+        image.with_suffix(".musicxml").write_text("<x/>")
+
+    recognise(b"png", runner=fake)
+    assert not seen[0].parent.exists()
+
+
+def test_homr_command_uses_venv_executable():
+    command = homr_command(Path("/tmp/page.png"))
+    assert command[0].endswith("/homr") and command[1] == "/tmp/page.png"
