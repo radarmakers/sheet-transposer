@@ -52,6 +52,9 @@ if upload is not None:
             except ReadError as error:
                 status.update(label="Couldn't read the music", state="error")
                 st.error(str(error))
+                if error.details:
+                    with st.expander("Technical details"):
+                        st.code(error.details, language=None)
                 st.stop()
             read_seconds[digest] = time.monotonic() - started
             status.update(label="Music read", state="complete")

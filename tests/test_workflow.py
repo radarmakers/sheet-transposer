@@ -88,3 +88,14 @@ def test_image_preparation_waits_for_a_running_recognition(png, k545_xml, monkey
         released = time.monotonic()
     worker.join()
     assert started and started[0] >= released
+
+
+def test_read_error_carries_homr_details(png):
+    from sheet_transposer.omr import OmrError
+
+    def failing(image):
+        raise OmrError("Sorry — we couldn't read any music in that image.", details="homr: boom")
+
+    with pytest.raises(ReadError) as caught:
+        read_page(png, recognise=failing)
+    assert caught.value.details == "homr: boom"

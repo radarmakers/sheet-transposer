@@ -114,3 +114,21 @@ def test_out_of_memory_has_its_own_message(error):
 
     with pytest.raises(OmrError, match="Image processing engine out of memory"):
         recognise(b"png", runner=fake)
+
+
+def test_failure_details_include_homr_output():
+    def fake(image: Path, timeout_s: int) -> None:
+        raise subprocess.CalledProcessError(1, "homr", output=b"loading", stderr=b"Traceback...\nOSError: read-only")
+
+    with pytest.raises(OmrError) as caught:
+        recognise(b"png", runner=fake)
+    assert "OSError: read-only" in caught.value.details
+
+
+def test_missing_output_details_include_homr_output():
+    def fake(image: Path, timeout_s: int) -> str:
+        return "An error occurred while processing page.png: No noteheads or clefs found"
+
+    with pytest.raises(OmrError) as caught:
+        recognise(b"png", runner=fake)
+    assert "No noteheads" in caught.value.details
