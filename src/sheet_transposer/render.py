@@ -11,6 +11,8 @@ PDF_PAGE_WIDTH_PX = 1654  # A4 at 200 dpi
 PDF_DPI = 200
 # Verovio's default resource path is set per thread at import; Streamlit renders on other threads.
 VEROVIO_RESOURCES = str(files("verovio") / "data")
+# Only real errors on the console; warnings like an unfinished slur in recognised music are noise.
+verovio.enableLog(verovio.LOG_ERROR)
 
 
 def render_svg_pages(
@@ -22,7 +24,7 @@ def render_svg_pages(
     fit_height: bool = False,
 ) -> list[str]:
     """Engrave MusicXML into one SVG string per page."""
-    toolkit = verovio.toolkit()
+    toolkit = verovio.toolkit(False)  # skip the default font lookup, which fails off the main thread
     toolkit.setResourcePath(VEROVIO_RESOURCES)
     toolkit.setOptions(
         {
